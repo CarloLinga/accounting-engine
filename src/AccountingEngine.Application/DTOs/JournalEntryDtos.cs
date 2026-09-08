@@ -38,11 +38,11 @@ public record JournalLineRequest
     public int Sequence { get; init; }
 }
 
-public record TransactionResponse
+public record JournalEntryResponse
 {
     public Guid Id { get; init; }
-    public string SourceType { get; init; } = string.Empty;
     public string Reference { get; init; } = string.Empty;
+    public string SourceType { get; init; } = string.Empty;
     public string? Description { get; init; }
     public DateTimeOffset PostedAt { get; init; }
     public required List<JournalLineResponse> Lines { get; init; }

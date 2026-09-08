@@ -96,7 +96,7 @@ public class AccountServiceTests
         var accountId = accountResult.Data!.Id;
 
         // 2. Create a Transaction and assign a JournalEntryLine to this Account
-        var transaction = new Transaction
+        var journalEntry = new JournalEntry
         {
             Id = Guid.NewGuid(),
             Reference = "INV-2026-TEST",
@@ -107,14 +107,14 @@ public class AccountServiceTests
         var line = new JournalEntryLine
         {
             Id = Guid.NewGuid(),
-            TransactionId = transaction.Id,
+            JournalEntryId = journalEntry.Id,
             AccountId = accountId,
             Sequence = 1,
             Debit = 0.00m,
             Credit = 250.00m
         };
 
-        context.Transactions.Add(transaction);
+        context.JournalEntries.Add(journalEntry);
         context.JournalEntryLines.Add(line);
         await context.SaveChangesAsync();
 

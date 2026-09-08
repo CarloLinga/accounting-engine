@@ -4,7 +4,9 @@ using AccountingEngine.Application.Interfaces;
 using AccountingEngine.Application.Services;
 using AccountingEngine.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Scalar.AspNetCore; // 1. Added Scalar namespace
+using System.Reflection;
+using System.Xml.XPath;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,7 +51,54 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi(); // .NET 9 native OpenAPI generator
+
+// Configure OpenAPI for .NET 9 with XML Comments
+builder.Services.AddOpenApi(options =>
+{
+    // Locate the compiled XML documentation file
+    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+
+    if (File.Exists(xmlPath))
+    {
+        var xmlDoc = new XPathDocument(xmlPath);
+        var navigator = xmlDoc.CreateNavigator();
+
+        // Operation transformer to extract <summary> and <param> tags for endpoints
+        options.AddOperationTransformer((operation, context, cancellationToken) =>
+        {
+            var methodInfo = context.Description.ActionDescriptor.EndpointMetadata
+                .OfType<MethodInfo>()
+                .FirstOrDefault();
+
+            if (methodInfo != null)
+            {
+                // Format C# method signature into XML member key (e.g. M:Namespace.Controller.Action)
+                var memberKey = $"M:{methodInfo.DeclaringType?.FullName}.{methodInfo.Name}";
+                var memberNode = navigator.SelectSingleNode($"/doc/members/member[@name='{memberKey}']");
+
+                if (memberNode != null)
+                {
+                    var summaryNode = memberNode.SelectSingleNode("summary");
+                    if (summaryNode != null)
+                    {
+                        operation.Summary = summaryNode.Value.Trim();
+                    }
+                }
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Info.Title = "Accounting Engine API";
+        document.Info.Version = "v0.1";
+        document.Info.Description = "Professional headless Clean Architecture accounting engine.";
+        return Task.CompletedTask;
+    });
+});
 
 var app = builder.Build();
 
@@ -59,11 +108,17 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();               // Serves JSON schema at /openapi/v1.json
-    app.MapScalarApiReference();    // 2. Replaced UseSwaggerUI with Scalar API UI
+    // Map Scalar UI endpoint at /scalar/v1
+    app.MapScalarApiReference(options =>
+    {
+        options.WithTitle("Accounting Engine API Docs")
+               .WithTheme(ScalarTheme.Purple)
+               .WithDefaultHttpClient(ScalarTarget.JavaScript, ScalarClient.Axios);
+    });
 }
 
 app.UseHttpsRedirection();
-
+app.UseAuthorization();
 // Map Controller Routes (/api/accounts, /api/postings, etc.)
 app.MapControllers();
 

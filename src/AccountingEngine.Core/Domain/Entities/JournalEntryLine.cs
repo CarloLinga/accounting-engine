@@ -6,8 +6,8 @@ public class JournalEntryLine
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid TransactionId { get; set; }
-    public Transaction Transaction { get; set; } = null!;
+    public Guid JournalEntryId { get; set; }
+    public JournalEntry JournalEntry { get; set; } = null!;
 
     public Guid AccountId { get; set; }
     public Account Account { get; set; } = null!;

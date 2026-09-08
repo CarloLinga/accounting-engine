@@ -25,12 +25,12 @@ public class JournalEntryLineConfiguration : IEntityTypeConfiguration<JournalEnt
         builder.Property(j => j.Credit)
                .HasPrecision(15, 2);
 
-        builder.HasIndex(j => new { j.TransactionId, j.Sequence })
+        builder.HasIndex(j => new { j.Id, j.Sequence })
                .IsUnique();
 
-        builder.HasOne(j => j.Transaction)
+        builder.HasOne(j => j.JournalEntry)
                .WithMany(t => t.JournalEntryLines)
-               .HasForeignKey(j => j.TransactionId)
+               .HasForeignKey(j => j.JournalEntryId)
                .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(j => j.Account)

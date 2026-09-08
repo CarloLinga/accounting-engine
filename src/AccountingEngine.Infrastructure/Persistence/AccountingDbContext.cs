@@ -10,7 +10,7 @@ public class AccountingDbContext : DbContext, IAccountingDbContext
         : base(options) { }
 
     public DbSet<Account> Accounts => Set<Account>();
-    public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<JournalEntryLine> JournalEntryLines => Set<JournalEntryLine>();
     public DbSet<SourceRule> SourceRules => Set<SourceRule>();
     public DbSet<SourceRuleLine> SourceRuleLines => Set<SourceRuleLine>();

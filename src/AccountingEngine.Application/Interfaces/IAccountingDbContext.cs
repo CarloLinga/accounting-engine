@@ -6,7 +6,7 @@ namespace AccountingEngine.Application.Interfaces;
 public interface IAccountingDbContext
 {
     DbSet<Account> Accounts { get; }
-    DbSet<Transaction> Transactions { get; }
+    DbSet<JournalEntry> JournalEntries { get; }
     DbSet<JournalEntryLine> JournalEntryLines { get; }
     DbSet<SourceRule> SourceRules { get; }
     DbSet<SourceRuleLine> SourceRuleLines { get; }

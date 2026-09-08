@@ -1,20 +1,26 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace AccountingEngine.Core.Domain.Entities;
 
 public class JournalEntry
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    public Guid TransactionId { get; set; }
-    public Transaction Transaction { get; set; } = null!;
+    [Required]
+    [MaxLength(100)]
+    public string Reference { get; set; } = string.Empty;
 
-    public Guid AccountId { get; set; }
-    public Account Account { get; set; } = null!;
+    [Required]
+    [MaxLength(50)]
+    public string SourceType { get; set; } = string.Empty;
 
-    // Explicit Debit and Credit amounts (Non-negative)
-    public decimal Debit { get; set; }
-    public decimal Credit { get; set; }
+    [MaxLength(500)]
+    public string? Description { get; set; }
 
-    public int Sequence { get; set; }
+    public DateTimeOffset PostedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    // Navigation Properties
+    public ICollection<JournalEntryLine> JournalEntryLines { get; set; } = new List<JournalEntryLine>();
 }
