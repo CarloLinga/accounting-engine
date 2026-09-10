@@ -21,7 +21,7 @@ public class JournalService : IJournalService
     {
         var normalizedSource = request.SourceType.Trim().ToUpperInvariant();
 
-        // 1. Validate SourceType against EventRules table
+        // 1. Validate SourceType against SourceRules table
         var rule = await _dbContext.SourceRules
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.SourceType == normalizedSource, cancellationToken);
