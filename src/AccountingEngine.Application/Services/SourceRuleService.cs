@@ -19,6 +19,17 @@ public class SourceRuleService : ISourceRuleService
         CreateSourceRuleRequest request, 
         CancellationToken cancellationToken = default)
     {
+        if (request is null)
+        {
+            return ServiceResult<SourceRuleResponse>.Fail("Source rule request cannot be null.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SourceType)
+            || string.IsNullOrWhiteSpace(request.Description))
+        {
+            return ServiceResult<SourceRuleResponse>.Fail("Source type and description are required.");
+        }
+
         var normalizedCode = request.SourceType.Trim().ToUpperInvariant();
 
         // 1. Check uniqueness
@@ -50,8 +61,19 @@ public class SourceRuleService : ISourceRuleService
                     "Automated source rules must define at least two template lines.");
             }
 
-            var hasDebit = request.RuleLines.Any(l => l.EntryType.Equals("Debit", StringComparison.OrdinalIgnoreCase));
-            var hasCredit = request.RuleLines.Any(l => l.EntryType.Equals("Credit", StringComparison.OrdinalIgnoreCase));
+            // Reject unknown posting sides before the debit/credit presence check so
+            // callers get "Invalid posting side ..." instead of a misleading message.
+            foreach (var line in request.RuleLines)
+            {
+                if (!Enum.TryParse<PostingType>(line.EntryType?.Trim(), ignoreCase: true, out _))
+                {
+                    return ServiceResult<SourceRuleResponse>.Fail(
+                        $"Invalid posting side '{line.EntryType}' for account '{line.AccountCode.Trim()}'. Expected 'Debit' or 'Credit'.");
+                }
+            }
+
+            var hasDebit = request.RuleLines.Any(l => l.EntryType.Trim().Equals("Debit", StringComparison.OrdinalIgnoreCase));
+            var hasCredit = request.RuleLines.Any(l => l.EntryType.Trim().Equals("Credit", StringComparison.OrdinalIgnoreCase));
 
             if (!hasDebit || !hasCredit)
             {
@@ -97,13 +119,26 @@ public class SourceRuleService : ISourceRuleService
             {
                 var cleanCode = lineReq.AccountCode.Trim();
 
+                if (string.IsNullOrWhiteSpace(lineReq.EntryType)
+                    || !Enum.TryParse<PostingType>(lineReq.EntryType.Trim(), ignoreCase: true, out var entryType))
+                {
+                    return ServiceResult<SourceRuleResponse>.Fail(
+                        $"Invalid posting side '{lineReq.EntryType}' for account '{cleanCode}'. Expected 'Debit' or 'Credit'.");
+                }
+
+                if (string.IsNullOrWhiteSpace(lineReq.AmountType))
+                {
+                    return ServiceResult<SourceRuleResponse>.Fail(
+                        $"Amount type identifier is required for account '{cleanCode}' (e.g., BASE_AMOUNT, TAX_AMOUNT, TOTAL_AMOUNT).");
+                }
+
                 rule.RuleLines.Add(new SourceRuleLine
                 {
                     Id = Guid.NewGuid(),
                     SourceRuleId = rule.Id,
                     AccountId = accountMap[cleanCode],
-                    EntryType = Enum.Parse<PostingType>(lineReq.EntryType.Trim(), ignoreCase: true),
-                    AmountType = lineReq.AmountType.Trim(),
+                    EntryType = entryType,
+                    AmountType = lineReq.AmountType.Trim().ToUpperInvariant(),
                     Sequence = lineReq.Sequence
                 });
             }

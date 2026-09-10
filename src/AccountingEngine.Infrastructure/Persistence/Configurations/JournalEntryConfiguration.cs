@@ -26,8 +26,8 @@ public class JournalEntryConfiguration : IEntityTypeConfiguration<JournalEntry>
         builder.HasIndex(t => t.PostedAt);
 
         builder.HasMany(j => j.JournalEntryLines)
-            .WithOne()
-            .HasForeignKey(l => l.Id)
+            .WithOne(l => l.JournalEntry)
+            .HasForeignKey(l => l.JournalEntryId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

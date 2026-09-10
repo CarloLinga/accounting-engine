@@ -10,9 +10,13 @@ public class JournalEntryLineConfiguration : IEntityTypeConfiguration<JournalEnt
     {
         builder.ToTable("journal_entry_lines", t =>
         {
+            // CAST(... AS NUMERIC) keeps this constraint portable: numeric(15,2) is a
+            // real numeric on Postgres but is stored as TEXT-affinity by the SQLite
+            // provider, where `credit = 0` would otherwise be a text comparison.
             t.HasCheckConstraint(
                 "chk_debit_xor_credit",
-                "(debit > 0 AND credit = 0) OR (credit > 0 AND debit = 0)"
+                "(CAST(debit AS NUMERIC) > 0 AND CAST(credit AS NUMERIC) = 0)"
+                + " OR (CAST(credit AS NUMERIC) > 0 AND CAST(debit AS NUMERIC) = 0)"
             );
         });
 

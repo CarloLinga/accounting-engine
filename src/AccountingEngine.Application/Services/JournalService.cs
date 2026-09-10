@@ -119,7 +119,16 @@ public class JournalService : IJournalService
 
         // 8. Persist
         _dbContext.JournalEntries.Add(journalEntry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"A journal entry with reference '{journalEntry.Reference}' already exists.");
+        }
 
         return ServiceResult<JournalEntryResponse>.Ok(new JournalEntryResponse
         {
@@ -261,36 +270,110 @@ public class JournalService : IJournalService
         PostSourceTransactionRequest request,
         CancellationToken cancellationToken = default)
     {
-        // 1. Fetch active SourceRule along with its configuration lines
+        if (request is null)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail("Source transaction request cannot be null.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SourceType))
+        {
+            return ServiceResult<JournalEntryResponse>.Fail("Source type is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reference))
+        {
+            return ServiceResult<JournalEntryResponse>.Fail("Transaction reference is required.");
+        }
+
+        if (request.Amounts is null || request.Amounts.Count == 0)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail("At least one amount must be provided.");
+        }
+
+        var normalizedSource = request.SourceType.Trim().ToUpperInvariant();
+        var cleanReference = request.Reference.Trim();
+
+        // 1. Fetch SourceRule with lines AND accounts in one graph, then detach the
+        // whole graph so subsequent reads/creates aren't affected by change tracking.
         var rule = await _dbContext.SourceRules
             .Include(r => r.RuleLines)
-            .FirstOrDefaultAsync(r => r.SourceType == request.SourceType, cancellationToken);
+            .ThenInclude(l => l.Account)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.SourceType == normalizedSource, cancellationToken);
 
         if (rule is null)
         {
-            return ServiceResult<JournalEntryResponse>.Fail($"No Source Rule found for '{request.SourceType}'.");
+            return ServiceResult<JournalEntryResponse>.Fail($"No Source Rule found for '{normalizedSource}'.");
+        }
+
+        if (!rule.IsActive)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"Transaction source '{normalizedSource}' is currently inactive.");
+        }
+
+        if (rule.IsManualEntryAllowed)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"Source type '{normalizedSource}' is configured for manual entries and cannot be posted automatically.");
+        }
+
+        if (rule.RuleLines.Count == 0)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"Source rule '{normalizedSource}' has no template lines configured.");
+        }
+
+        var duplicateReference = await _dbContext.JournalEntries
+            .AnyAsync(j => j.Reference == cleanReference, cancellationToken);
+
+        if (duplicateReference)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"A journal entry with reference '{cleanReference}' already exists.");
+        }
+
+        // Normalize incoming amount keys so lookups stay case-insensitive even for
+        // DbContext implementations that do not honour the dictionary comparer.
+        var amounts = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in request.Amounts)
+        {
+            var key = (kvp.Key ?? string.Empty).Trim();
+            if (key.Length == 0)
+            {
+                return ServiceResult<JournalEntryResponse>.Fail("Amount keys cannot be empty.");
+            }
+
+            amounts[key] = kvp.Value;
         }
 
         var journalLines = new List<JournalEntryLine>();
         decimal totalDebit = 0m;
         decimal totalCredit = 0m;
 
-        // 2. Evaluate each rule line against provided amounts
+        // 2. Evaluate each rule line against provided amounts.
         foreach (var lineRule in rule.RuleLines.OrderBy(l => l.Sequence))
         {
-            if (!request.Amounts.TryGetValue(lineRule.AmountType, out var amount) || amount <= 0)
+            if (!amounts.TryGetValue(lineRule.AmountType, out var amount) || amount <= 0)
             {
                 return ServiceResult<JournalEntryResponse>.Fail(
                     $"Missing or invalid amount for key '{lineRule.AmountType}'.");
             }
 
-            // Fetch corresponding Account ID based on AccountCode
-            var account = await _dbContext.Accounts
-                .FirstOrDefaultAsync(a => a.Id == lineRule.AccountId, cancellationToken);
+            var account = lineRule.Account
+                ?? await _dbContext.Accounts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.Id == lineRule.AccountId, cancellationToken);
 
             if (account is null)
             {
                 return ServiceResult<JournalEntryResponse>.Fail($"Account ID '{lineRule.AccountId}' not found.");
+            }
+
+            if (!account.IsActive)
+            {
+                return ServiceResult<JournalEntryResponse>.Fail(
+                    $"Account '{account.Code}' referenced by source rule '{normalizedSource}' is inactive.");
             }
 
             var isDebit = lineRule.EntryType == PostingType.Debit;
@@ -302,11 +385,12 @@ public class JournalService : IJournalService
 
             journalLines.Add(new JournalEntryLine
             {
+                Id = Guid.NewGuid(),
                 AccountId = account.Id,
                 Debit = debit,
                 Credit = credit,
                 Sequence = lineRule.Sequence,
-                Description = $"Sales Invoice {request.Reference}"
+                Description = (request.Description ?? rule.Description)?.Trim()
             });
         }
 
@@ -320,16 +404,42 @@ public class JournalService : IJournalService
         // 4. Construct JournalEntry Header
         var entry = new JournalEntry
         {
-            Reference = request.Reference,
-            SourceType = request.SourceType,
-            Description = request.Description ?? rule.Description,
+            Id = Guid.NewGuid(),
+            Reference = cleanReference,
+            SourceType = normalizedSource,
+            Description = (request.Description ?? rule.Description)?.Trim(),
             PostedAt = request.PostedAt,
+            CreatedAt = DateTimeOffset.UtcNow,
             JournalEntryLines = journalLines
         };
 
         _dbContext.JournalEntries.Add(entry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return ServiceResult<JournalEntryResponse>.Ok(MapToResponse(entry));
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            var detail = ex.InnerException?.Message ?? ex.Message;
+
+            if (detail.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("already exists", StringComparison.OrdinalIgnoreCase)
+                || detail.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+            {
+                return ServiceResult<JournalEntryResponse>.Fail(
+                    $"A journal entry with reference '{cleanReference}' already exists.");
+            }
+
+            return ServiceResult<JournalEntryResponse>.Fail($"Failed to save journal entry '{cleanReference}': {detail}");
+        }
+
+        // Reload with accounts so the response includes account codes/names.
+        var savedEntry = await _dbContext.JournalEntries
+            .Include(j => j.JournalEntryLines)
+                .ThenInclude(l => l.Account)
+            .FirstOrDefaultAsync(j => j.Id == entry.Id, cancellationToken);
+
+        return ServiceResult<JournalEntryResponse>.Ok(MapToResponse(savedEntry ?? entry));
     }
 }
