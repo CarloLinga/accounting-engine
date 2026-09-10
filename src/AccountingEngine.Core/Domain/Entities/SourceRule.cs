@@ -25,5 +25,5 @@ public class SourceRule
     public DateTimeOffset? UpdatedAt { get; set; }
 
     // Child lines for automated rules (empty for header-only manual categories)
-    public ICollection<SourceRuleLine> Lines { get; set; } = new List<SourceRuleLine>();
+    public ICollection<SourceRuleLine> RuleLines { get; set; } = new List<SourceRuleLine>();
 }

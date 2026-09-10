@@ -22,7 +22,7 @@ public class SourceRuleConfiguration : IEntityTypeConfiguration<SourceRule>
         builder.Property(e => e.IsManualEntryAllowed)
                .HasDefaultValue(false);
 
-        builder.HasMany(e => e.Lines)
+       builder.HasMany(e => e.RuleLines)
                .WithOne(l => l.SourceRule)
                .HasForeignKey(l => l.SourceRuleId)
                .OnDelete(DeleteBehavior.Cascade);

@@ -45,7 +45,7 @@ public record JournalEntryResponse
     public string SourceType { get; init; } = string.Empty;
     public string? Description { get; init; }
     public DateTimeOffset PostedAt { get; init; }
-    public required List<JournalLineResponse> Lines { get; init; }
+    public required List<JournalLineResponse> JournalLines { get; init; }
 }
 
 public record JournalLineResponse

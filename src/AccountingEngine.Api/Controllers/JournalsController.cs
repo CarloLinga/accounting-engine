@@ -30,7 +30,7 @@ public class JournalsController : ControllerBase
         [FromBody] PostGeneralJournalRequest request, 
         CancellationToken cancellationToken)
     {
-        var result = await _journalService.PostGeneralJournalAsync(request, cancellationToken);
+        var result = await _journalService.PostJournalEntryAsync(request, cancellationToken);
 
         if (!result.Success)
         {
@@ -39,7 +39,7 @@ public class JournalsController : ControllerBase
 
         // Returns HTTP 201 Created with a reference link to the lookup endpoint
         return CreatedAtAction(
-            nameof(GetTransactionByReference), 
+            nameof(GetJournalEntryByReference), 
             new { reference = result.Data!.Reference }, 
             result.Data);
     }
@@ -65,7 +65,7 @@ public class JournalsController : ControllerBase
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(JournalEntryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetTransactionById(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetJournalEntryById(Guid id, CancellationToken cancellationToken)
     {
         var transaction = await _journalService.GetJournalEntryByIdAsync(id, cancellationToken);
         return transaction is null ? NotFound(new { error = $"Transaction '{id}' not found." }) : Ok(transaction);   
@@ -80,7 +80,7 @@ public class JournalsController : ControllerBase
     [HttpGet("reference/{reference}")]
     [ProducesResponseType(typeof(JournalEntryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetTransactionByReference(
+    public async Task<IActionResult> GetJournalEntryByReference(
         [FromRoute] string reference, 
         CancellationToken cancellationToken)
     {
@@ -92,5 +92,28 @@ public class JournalsController : ControllerBase
         }
 
         return Ok(transaction);
+    }
+
+    /// <summary>
+    /// Posts a transaction generated from a predefined Source Rule (e.g., CREDIT_INVOICE).
+    /// </summary>
+    [HttpPost("source")]
+    [ProducesResponseType(typeof(JournalEntryResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> PostJournalSource(
+        [FromBody] PostSourceTransactionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _journalService.PostJournalSourceAsync(request, cancellationToken);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return CreatedAtAction(
+            nameof(GetJournalEntryByReference),
+            new { reference = result.Data!.Reference },
+            result.Data);
     }
 }

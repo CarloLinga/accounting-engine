@@ -97,7 +97,7 @@ public class SourceRuleService : ISourceRuleService
             {
                 var cleanCode = lineReq.AccountCode.Trim();
 
-                rule.Lines.Add(new SourceRuleLine
+                rule.RuleLines.Add(new SourceRuleLine
                 {
                     Id = Guid.NewGuid(),
                     SourceRuleId = rule.Id,
@@ -114,7 +114,7 @@ public class SourceRuleService : ISourceRuleService
 
         // Fetch back rule including Account navigation for response mapping
         var savedRule = await _context.SourceRules
-            .Include(r => r.Lines)
+            .Include(r => r.RuleLines)
                 .ThenInclude(l => l.Account)
             .FirstAsync(r => r.Id == rule.Id, cancellationToken);
 
@@ -124,7 +124,7 @@ public class SourceRuleService : ISourceRuleService
     public async Task<List<SourceRuleResponse>> GetAllRulesAsync(CancellationToken cancellationToken = default)
     {
         var rules = await _context.SourceRules
-            .Include(r => r.Lines)
+            .Include(r => r.RuleLines)
                 .ThenInclude(l => l.Account)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -159,7 +159,7 @@ public class SourceRuleService : ISourceRuleService
         Description = rule.Description,
         IsActive = rule.IsActive,
         IsManualEntryAllowed = rule.IsManualEntryAllowed,
-        RuleLines = rule.Lines.Select(l => new SourceRuleLineResponse
+        RuleLines = rule.RuleLines.Select(l => new SourceRuleLineResponse
         {
             Id = l.Id,
             AccountCode = l.Account?.Code ?? string.Empty,

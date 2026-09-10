@@ -12,7 +12,6 @@ public class SourceRuleLine
 
     public Guid AccountId { get; set; }
     public Account Account { get; set; } = null!;
-
     /// <summary>
     /// Indicates whether this line debits or credits the target account (Debit / Credit).
     /// </summary>

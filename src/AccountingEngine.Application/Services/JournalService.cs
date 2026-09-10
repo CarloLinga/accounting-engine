@@ -1,6 +1,7 @@
 using AccountingEngine.Application.DTOs;
 using AccountingEngine.Application.Interfaces;
 using AccountingEngine.Core.Domain.Entities;
+using AccountingEngine.Core.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace AccountingEngine.Application.Services;
@@ -14,7 +15,7 @@ public class JournalService : IJournalService
         _dbContext = dbContext;
     }
 
-    public async Task<ServiceResult<JournalEntryResponse>> PostGeneralJournalAsync(
+    public async Task<ServiceResult<JournalEntryResponse>> PostJournalEntryAsync(
         PostGeneralJournalRequest request, 
         CancellationToken cancellationToken = default)
     {
@@ -127,7 +128,7 @@ public class JournalService : IJournalService
             Reference = journalEntry.Reference,
             Description = journalEntry.Description,
             PostedAt = journalEntry.PostedAt,
-            Lines = request.Lines.Select((l, index) => new JournalLineResponse
+            JournalLines = request.Lines.Select((l, index) => new JournalLineResponse
             {
                 Id = Guid.Empty,
                 Sequence = l.Sequence == 0 ? index + 1 : l.Sequence,
@@ -166,7 +167,7 @@ public class JournalService : IJournalService
         if (!string.IsNullOrWhiteSpace(sourceType))
         {
             var cleanSourceType = sourceType.Trim().ToUpperInvariant();
-            query = query.Where(t => t.SourceType == cleanSourceType);
+            query = query.Where(t => t.SourceType.Trim().ToUpper() == cleanSourceType);
         }
 
         var journalEntryLines = await query
@@ -219,7 +220,7 @@ public class JournalService : IJournalService
             Reference = journalEntry.Reference,
             Description = journalEntry.Description,
             PostedAt = journalEntry.PostedAt,
-            Lines = journalEntry.JournalEntryLines
+            JournalLines = journalEntry.JournalEntryLines
                 .OrderBy(l => l.Sequence)
                 .Select(l => new JournalLineResponse
                 {
@@ -242,7 +243,7 @@ public class JournalService : IJournalService
         SourceType = t.SourceType,
         Description = t.Description,
         PostedAt = t.PostedAt,
-        Lines = t.JournalEntryLines
+        JournalLines = t.JournalEntryLines
             .OrderBy(l => l.Sequence)
             .Select(l => new JournalLineResponse
             {
@@ -255,4 +256,80 @@ public class JournalService : IJournalService
                 Sequence = l.Sequence
             }).ToList()
     };
+
+    public async Task<ServiceResult<JournalEntryResponse>> PostJournalSourceAsync(
+        PostSourceTransactionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Fetch active SourceRule along with its configuration lines
+        var rule = await _dbContext.SourceRules
+            .Include(r => r.RuleLines)
+            .FirstOrDefaultAsync(r => r.SourceType == request.SourceType, cancellationToken);
+
+        if (rule is null)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail($"No Source Rule found for '{request.SourceType}'.");
+        }
+
+        var journalLines = new List<JournalEntryLine>();
+        decimal totalDebit = 0m;
+        decimal totalCredit = 0m;
+
+        // 2. Evaluate each rule line against provided amounts
+        foreach (var lineRule in rule.RuleLines.OrderBy(l => l.Sequence))
+        {
+            if (!request.Amounts.TryGetValue(lineRule.AmountType, out var amount) || amount <= 0)
+            {
+                return ServiceResult<JournalEntryResponse>.Fail(
+                    $"Missing or invalid amount for key '{lineRule.AmountType}'.");
+            }
+
+            // Fetch corresponding Account ID based on AccountCode
+            var account = await _dbContext.Accounts
+                .FirstOrDefaultAsync(a => a.Id == lineRule.AccountId, cancellationToken);
+
+            if (account is null)
+            {
+                return ServiceResult<JournalEntryResponse>.Fail($"Account ID '{lineRule.AccountId}' not found.");
+            }
+
+            var isDebit = lineRule.EntryType == PostingType.Debit;
+            var debit = isDebit ? amount : 0m;
+            var credit = isDebit ? 0m : amount;
+
+            totalDebit += debit;
+            totalCredit += credit;
+
+            journalLines.Add(new JournalEntryLine
+            {
+                AccountId = account.Id,
+                Debit = debit,
+                Credit = credit,
+                Sequence = lineRule.Sequence,
+                Description = $"Sales Invoice {request.Reference}"
+            });
+        }
+
+        // 3. Enforce Double-Entry Balancing Principle
+        if (totalDebit != totalCredit)
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"Transaction is unbalanced. Total Debits ({totalDebit}) != Total Credits ({totalCredit}).");
+        }
+
+        // 4. Construct JournalEntry Header
+        var entry = new JournalEntry
+        {
+            Reference = request.Reference,
+            SourceType = request.SourceType,
+            Description = request.Description ?? rule.Description,
+            PostedAt = request.PostedAt,
+            JournalEntryLines = journalLines
+        };
+
+        _dbContext.JournalEntries.Add(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return ServiceResult<JournalEntryResponse>.Ok(MapToResponse(entry));
+    }
 }

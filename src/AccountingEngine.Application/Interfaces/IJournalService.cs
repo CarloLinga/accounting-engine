@@ -4,9 +4,14 @@ namespace AccountingEngine.Application.Interfaces;
 
 public interface IJournalService
 {
-    // POST  a Transaction Journal
-    Task<ServiceResult<JournalEntryResponse>> PostGeneralJournalAsync(
+    // POST a General Journal
+    Task<ServiceResult<JournalEntryResponse>> PostJournalEntryAsync(
         PostGeneralJournalRequest request, 
+        CancellationToken cancellationToken = default);
+    
+    // POST a Source Journal
+    Task<ServiceResult<JournalEntryResponse>>  PostJournalSourceAsync(
+        PostSourceTransactionRequest request,
         CancellationToken cancellationToken = default);
 
     // GET all transactions with optional filtering
