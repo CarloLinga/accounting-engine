@@ -123,5 +123,11 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 // Map Controller Routes (/api/accounts, /api/postings, etc.)
 app.MapControllers();
+app.MapGet("/", () => Results.Ok(new
+{
+    name = "Accounting Engine API",
+    status = "healthy",
+    api = "/api"
+}));
 
 app.Run();
