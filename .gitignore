@@ -486,6 +486,7 @@ $RECYCLE.BIN/
 # Custom Environment Secrets
 appsettings.json
 appsettings.Development.json
+appsettings.Seeder.json
 *.env
 *.env.local
 data/
