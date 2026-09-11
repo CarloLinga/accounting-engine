@@ -34,6 +34,7 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<IJournalService, JournalService>();
 builder.Services.AddScoped<ISourceRuleService, SourceRuleService>();
 builder.Services.AddScoped<ITrialBalanceService, TrialBalanceService>();
+builder.Services.AddScoped<ILedgerService, LedgerService>();
 // builder.Services.AddScoped<IPostingEngine, PostingEngine>(); // Register when built
 
 // -----------------------------------------------------------------------------
