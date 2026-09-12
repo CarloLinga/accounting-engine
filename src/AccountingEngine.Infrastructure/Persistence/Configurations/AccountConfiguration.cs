@@ -15,5 +15,25 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
 
         builder.Property(a => a.Type)
                .HasConversion<string>(); // Store enum as string
+
+        builder.Property(a => a.Statement)
+               .HasConversion<string>();
+
+        builder.Property(a => a.BalanceSheetClass)
+               .HasConversion<string>();
+
+        builder.Property(a => a.IncomeStatementClass)
+               .HasConversion<string>();
+
+        builder.Property(a => a.CashFlowActivity)
+               .HasConversion<string>();
+
+        // Header -> detail hierarchy for report grouping.
+        builder.HasOne(a => a.ParentAccount)
+               .WithMany(a => a.ChildAccounts)
+               .HasForeignKey(a => a.ParentAccountId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(a => new { a.ParentAccountId, a.DisplayOrder });
     }
 }

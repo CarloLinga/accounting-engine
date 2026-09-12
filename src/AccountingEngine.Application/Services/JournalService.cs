@@ -65,16 +65,29 @@ public class JournalService : IJournalService
 
         // 4. Resolve Accounts
         var accountCodes = request.Lines.Select(l => l.AccountCode.Trim()).Distinct().ToList();
-        var accounts = await _dbContext.Accounts
+        var accountsByCode = await _dbContext.Accounts
             .Where(a => accountCodes.Contains(a.Code) && a.IsActive)
-            .ToDictionaryAsync(a => a.Code, a => a.Id, cancellationToken);
+            .ToDictionaryAsync(a => a.Code, a => a, cancellationToken);
 
-        var missingAccounts = accountCodes.Except(accounts.Keys).ToList();
+        var missingAccounts = accountCodes.Except(accountsByCode.Keys).ToList();
         if (missingAccounts.Any())
         {
             return ServiceResult<JournalEntryResponse>.Fail(
                 $"The following account codes do not exist or are inactive: {string.Join(", ", missingAccounts)}");
         }
+
+        // Headers (IsPostable=false) carry no balances; reject direct postings.
+        var headerCodes = accountsByCode.Values
+            .Where(a => !a.IsPostable)
+            .Select(a => a.Code)
+            .ToList();
+        if (headerCodes.Any())
+        {
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"The following accounts are report headers and cannot be posted to directly: {string.Join(", ", headerCodes)}");
+        }
+
+        var accounts = accountsByCode.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
 
         // 5. Line-level validation
         for (int i = 0; i < request.Lines.Count; i++)
@@ -374,6 +387,12 @@ public class JournalService : IJournalService
             {
                 return ServiceResult<JournalEntryResponse>.Fail(
                     $"Account '{account.Code}' referenced by source rule '{normalizedSource}' is inactive.");
+            }
+
+            if (!account.IsPostable)
+            {
+                return ServiceResult<JournalEntryResponse>.Fail(
+                    $"Account '{account.Code}' referenced by source rule '{normalizedSource}' is a report header and cannot be posted to.");
             }
 
             var isDebit = lineRule.EntryType == PostingType.Debit;

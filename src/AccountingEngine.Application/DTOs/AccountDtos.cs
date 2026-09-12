@@ -35,6 +35,24 @@ public record CreateAccountRequest
 
     [Required(ErrorMessage = "Account type is required.")]
     public AccountType Type { get; init; }
+
+    public FinancialStatement Statement { get; init; } = FinancialStatement.IncomeStatement;
+
+    public BalanceSheetClass? BalanceSheetClass { get; init; }
+
+    public IncomeStatementClass? IncomeStatementClass { get; init; }
+
+    public CashFlowActivity CashFlowActivity { get; init; } = CashFlowActivity.Unclassified;
+
+    public bool IsCashEquivalent { get; init; } = false;
+
+    public bool IsContra { get; init; } = false;
+
+    public bool IsPostable { get; init; } = true;
+
+    public string? ParentAccountCode { get; init; }
+
+    public int DisplayOrder { get; init; } = 0;
 }
 
 public record UpdateAccountRequest
@@ -59,7 +77,16 @@ public record AccountResponse(
     AccountType Type,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt
+    DateTimeOffset? UpdatedAt,
+    FinancialStatement Statement,
+    BalanceSheetClass? BalanceSheetClass,
+    IncomeStatementClass? IncomeStatementClass,
+    CashFlowActivity CashFlowActivity,
+    bool IsCashEquivalent,
+    bool IsContra,
+    bool IsPostable,
+    string? ParentAccountCode,
+    int DisplayOrder
 );
 
 public record ServiceResult<T>(
