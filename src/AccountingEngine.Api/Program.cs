@@ -15,6 +15,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 StartupHelpers.ConfigureForwardedHeaders(builder.Services);
 
+// CORS: financial statements are public read-only data; allow browser front-ends
+// (Excel Power Query, Google Apps Script, and direct JS fetch) to call the API.
+const string CorsPolicyName = "Frontend";
+builder.Services.AddCors(options => options.AddPolicy(CorsPolicyName, policy =>
+    policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+
 // -----------------------------------------------------------------------------
 // 1. Database Configuration (EF Core + Npgsql PostgreSQL)
 // -----------------------------------------------------------------------------
@@ -128,6 +134,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+app.UseCors(CorsPolicyName);
 
 if (!StartupHelpers.IsRunningOnRender())
 {
