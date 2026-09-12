@@ -24,26 +24,38 @@ public static class StartupHelpers
 
     public static string? ResolveConnectionString(ConfigurationManager configuration)
     {
-        // 1. Standard .NET config (appsettings + env var ConnectionStrings__DefaultConnection)
+        // NOTE: .NET already merges env vars into `configuration`, so
+        // ConnectionStrings__DefaultConnection set on Render normally arrives
+        // via fromConfig. The direct Environment reads below are belt-and-braces.
         var fromConfig = configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(fromConfig) && !IsLocalhostConnectionString(fromConfig))
-            return EnsureSslForNeon(Sanitize(fromConfig));
 
-        // 2. Explicit env vars (checked directly in case provider ordering differs)
+        // 1. Explicit non-localhost config wins (Render dashboard value, whether
+        //    it arrives via the config provider or the raw env var).
         var directEnv =
             Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
             ?? Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection")
             ?? Environment.GetEnvironmentVariable("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(directEnv))
-            return EnsureSslForNeon(Sanitize(directEnv.Trim()));
+        var effective = !string.IsNullOrWhiteSpace(fromConfig) && !IsLocalhostConnectionString(fromConfig)
+            ? fromConfig
+            : directEnv;
+        if (!string.IsNullOrWhiteSpace(effective))
+            return EnsureSslForNeon(Sanitize(effective.Trim()));
+
+        // 2. Local dev wins over a stale machine-level DATABASE_URL: an explicit
+        //    localhost string in appsettings means "I am developing locally" —
+        //    never let a leftover DATABASE_URL from another project (e.g. ezpos)
+        //    hijack local runs or force SSL against a non-SSL local Postgres.
+        if (!string.IsNullOrWhiteSpace(fromConfig))
+            return Sanitize(fromConfig);
 
         // 3. DATABASE_URL style: postgres://user:pass@host:port/db?sslmode=require
+        //    (only when nothing else is configured).
         var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
         if (!string.IsNullOrWhiteSpace(databaseUrl))
-            return ConvertToNpgsqlConnectionString(databaseUrl.Trim());
+            return ConvertToNpgsqlConnectionString(Sanitize(databaseUrl.Trim()));
 
-        // 4. Local dev fallback (localhost string from appsettings).
-        return string.IsNullOrWhiteSpace(fromConfig) ? null : Sanitize(fromConfig);
+        // 4. Nothing configured.
+        return null;
     }
 
     /// <summary>
@@ -113,10 +125,10 @@ public static class StartupHelpers
             || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection"))
             || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DefaultConnection")))
             return "environment variable (ConnectionStrings__DefaultConnection)";
+        if (!string.IsNullOrWhiteSpace(fromConfig))
+            return "appsettings.json (localhost)";
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DATABASE_URL")))
             return "environment variable (DATABASE_URL)";
-        if (!string.IsNullOrWhiteSpace(fromConfig))
-            return "appsettings.json fallback (localhost) - RENDER ENV VAR NOT PICKED UP";
         return "none found";
     }
 
