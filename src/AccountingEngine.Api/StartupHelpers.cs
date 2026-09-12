@@ -27,7 +27,7 @@ public static class StartupHelpers
         // 1. Standard .NET config (appsettings + env var ConnectionStrings__DefaultConnection)
         var fromConfig = configuration.GetConnectionString("DefaultConnection");
         if (!string.IsNullOrWhiteSpace(fromConfig) && !IsLocalhostConnectionString(fromConfig))
-            return EnsureSslForNeon(fromConfig);
+            return EnsureSslForNeon(Sanitize(fromConfig));
 
         // 2. Explicit env vars (checked directly in case provider ordering differs)
         var directEnv =
@@ -35,7 +35,7 @@ public static class StartupHelpers
             ?? Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection")
             ?? Environment.GetEnvironmentVariable("DefaultConnection");
         if (!string.IsNullOrWhiteSpace(directEnv))
-            return EnsureSslForNeon(directEnv.Trim());
+            return EnsureSslForNeon(Sanitize(directEnv.Trim()));
 
         // 3. DATABASE_URL style: postgres://user:pass@host:port/db?sslmode=require
         var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
@@ -43,7 +43,20 @@ public static class StartupHelpers
             return ConvertToNpgsqlConnectionString(databaseUrl.Trim());
 
         // 4. Local dev fallback (localhost string from appsettings).
-        return string.IsNullOrWhiteSpace(fromConfig) ? null : fromConfig;
+        return string.IsNullOrWhiteSpace(fromConfig) ? null : Sanitize(fromConfig);
+    }
+
+    /// <summary>
+    /// Strips stray wrapping quotes pasted from dashboards, e.g. '"Host=...;..."'.
+    /// This was the live Render 500: a leading quote turned Host into '"Host',
+    /// which Npgsql rejects with KeyNotFoundException on '"host'.
+    /// </summary>
+    private static string Sanitize(string cs)
+    {
+        cs = cs.Trim();
+        if ((cs.StartsWith('"') && cs.EndsWith('"')) || (cs.StartsWith('\'') && cs.EndsWith('\'')))
+            cs = cs[1..^1].Trim();
+        return cs.Trim('"', '\'').Trim();
     }
 
     private static bool IsLocalhostConnectionString(string cs)
