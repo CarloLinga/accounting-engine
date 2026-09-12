@@ -145,11 +145,12 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.MapGet("/health/db", async (AccountingDbContext db, ILogger<Program> logger) =>
 {
+    // NOTE: DbConnection.OpenAsync surfaces the REAL Npgsql error
+    // (CanConnectAsync swallows it and just returns false).
     try
     {
-        var canConnect = await db.Database.CanConnectAsync();
-        if (!canConnect)
-            return Results.Problem("CanConnectAsync() returned false.", statusCode: 500);
+        await using var conn = db.Database.GetDbConnection();
+        await conn.OpenAsync();
         var accountCount = await db.Accounts.CountAsync();
         return Results.Ok(new { status = "healthy", accounts = accountCount });
     }
@@ -159,5 +160,14 @@ app.MapGet("/health/db", async (AccountingDbContext db, ILogger<Program> logger)
         return Results.Problem(detail: ex.ToString(), title: "Database connection failed", statusCode: 500);
     }
 });
+
+// TEMPORARY diagnostics: shows WHERE the connection string came from + redacted
+// host/db/user (never the password). Remove once /health/db is green.
+app.MapGet("/health/config", (IConfiguration config) => Results.Ok(new
+{
+    source = StartupHelpers.GetConnectionStringSource((ConfigurationManager)config),
+    isRender = StartupHelpers.IsRunningOnRender(),
+    connection = StartupHelpers.GetSafeConnectionInfo(connectionString)
+}));
 
 app.Run();

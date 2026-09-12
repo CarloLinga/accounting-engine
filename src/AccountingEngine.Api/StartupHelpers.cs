@@ -89,4 +89,52 @@ public static class StartupHelpers
         }
         return null;
     }
+
+    /// <summary>Which configuration source the connection string came from (no secrets).</summary>
+    public static string GetConnectionStringSource(ConfigurationManager configuration)
+    {
+        var fromConfig = configuration.GetConnectionString("DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(fromConfig) && !IsLocalhostConnectionString(fromConfig))
+            return "ConnectionStrings:DefaultConnection (non-localhost)";
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection"))
+            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ConnectionStrings:DefaultConnection"))
+            || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DefaultConnection")))
+            return "environment variable (ConnectionStrings__DefaultConnection)";
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DATABASE_URL")))
+            return "environment variable (DATABASE_URL)";
+        if (!string.IsNullOrWhiteSpace(fromConfig))
+            return "appsettings.json fallback (localhost) - RENDER ENV VAR NOT PICKED UP";
+        return "none found";
+    }
+
+    /// <summary>Redacted connection info safe to return from a health endpoint (no password).</summary>
+    public static Dictionary<string, string> GetSafeConnectionInfo(string? connectionString)
+    {
+        var info = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return info;
+        if (connectionString.TrimStart().StartsWith("postgres", StringComparison.OrdinalIgnoreCase))
+        {
+            info["format"] = "url (postgres://...)";
+            try
+            {
+                var uri = new Uri(connectionString.Trim());
+                info["host"] = uri.Host;
+                info["port"] = uri.Port.ToString();
+                info["database"] = uri.AbsolutePath.Trim('/');
+                info["username"] = uri.UserInfo.Split(':')[0];
+            }
+            catch { info["parse"] = "failed"; }
+            return info;
+        }
+        foreach (var part in connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length != 2) continue;
+            var key = kv[0].Trim();
+            if (key.Equals("Password", StringComparison.OrdinalIgnoreCase)) continue;
+            info[key] = kv[1].Trim();
+        }
+        return info;
+    }
 }
