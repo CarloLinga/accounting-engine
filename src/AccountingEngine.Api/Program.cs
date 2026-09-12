@@ -104,12 +104,6 @@ builder.Services.AddOpenApi(options =>
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<AccountingDbContext>();
-    dbContext.Database.Migrate();
-}
-
 // -----------------------------------------------------------------------------
 // 4. HTTP Request Pipeline Configuration
 // -----------------------------------------------------------------------------
