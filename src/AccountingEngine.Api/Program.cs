@@ -6,15 +6,21 @@ using AccountingEngine.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Reflection;
 using System.Xml.XPath;
+using Microsoft.AspNetCore.HttpOverrides;
 using Scalar.AspNetCore;
 
+using AccountingEngine.Api;
+
 var builder = WebApplication.CreateBuilder(args);
+
+StartupHelpers.ConfigureForwardedHeaders(builder.Services);
 
 // -----------------------------------------------------------------------------
 // 1. Database Configuration (EF Core + Npgsql PostgreSQL)
 // -----------------------------------------------------------------------------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found in appsettings.json.");
+var connectionString = StartupHelpers.ResolveConnectionString(builder.Configuration)
+    ?? throw new InvalidOperationException(
+        "No database connection string found. Set 'ConnectionStrings__DefaultConnection' (or DATABASE_URL) in the Render environment variables to your Neon Postgres connection string.");
 
 builder.Services.AddDbContext<AccountingDbContext>(options =>
 {
@@ -119,7 +125,12 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseHttpsRedirection();
+app.UseForwardedHeaders();
+
+if (!StartupHelpers.IsRunningOnRender())
+{
+    app.UseHttpsRedirection();
+}
 app.UseAuthorization();
 // Map Controller Routes (/api/accounts, /api/postings, etc.)
 app.MapControllers();
@@ -129,5 +140,24 @@ app.MapGet("/", () => Results.Ok(new
     status = "healthy",
     api = "/api"
 }));
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
+app.MapGet("/health/db", async (AccountingDbContext db, ILogger<Program> logger) =>
+{
+    try
+    {
+        var canConnect = await db.Database.CanConnectAsync();
+        if (!canConnect)
+            return Results.Problem("CanConnectAsync() returned false.", statusCode: 500);
+        var accountCount = await db.Accounts.CountAsync();
+        return Results.Ok(new { status = "healthy", accounts = accountCount });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Database health check failed.");
+        return Results.Problem(detail: ex.ToString(), title: "Database connection failed", statusCode: 500);
+    }
+});
 
 app.Run();
