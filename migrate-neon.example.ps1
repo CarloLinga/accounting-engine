@@ -1,0 +1,3 @@
+# Local-only: point EF Core migrations at Neon (one shell, then close it).
+$env:ConnectionStrings__DefaultConnection = "Host=ep-frosty-hill-axf8grdu-pooler.c-4.us-east-2.aws.neon.tech;Database=neondb;Username=neondb_owner;Password=REPLACE_ME;SslMode=Require"
+dotnet ef database update --project src/AccountingEngine.Infrastructure/AccountingEngine.Infrastructure.csproj --startup-project src/AccountingEngine.Api/AccountingEngine.Api.csproj
