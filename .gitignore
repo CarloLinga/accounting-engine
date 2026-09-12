@@ -490,3 +490,6 @@ appsettings.Seeder.json
 *.env
 *.env.local
 data/
+
+# Seeder is for local development only
+src/AccountingEngine.Seeder/
