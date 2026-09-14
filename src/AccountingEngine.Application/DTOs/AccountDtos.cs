@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AccountingEngine.Core.Domain.Entities;
 using AccountingEngine.Core.Domain.Enums;
 
 namespace AccountingEngine.Application.DTOs;
@@ -68,6 +69,25 @@ public record UpdateAccountRequest
     }
 
     public bool IsActive { get; init; }
+
+    [Required(ErrorMessage = "Account type is required.")]
+    public AccountType Type { get; init; }
+
+    public FinancialStatement Statement { get; init; } = FinancialStatement.IncomeStatement;
+
+    public BalanceSheetClass? BalanceSheetClass { get; init; }
+
+    public IncomeStatementClass? IncomeStatementClass { get; init; }
+
+    public CashFlowActivity CashFlowActivity { get; init; } = CashFlowActivity.Unclassified;
+
+    public bool IsCashEquivalent { get; init; } = false;
+
+    public bool IsContra { get; init; } = false;
+
+    public bool IsPostable { get; init; } = true;
+
+    public string? ParentAccountCode { get; init; }
 }
 
 public record AccountResponse(

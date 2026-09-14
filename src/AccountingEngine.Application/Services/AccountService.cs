@@ -147,10 +147,29 @@ public class AccountService : IAccountService
         if (account is null)
             return ServiceResult<AccountResponse>.Fail($"Account with code '{code}' was not found.");
 
+        Account? parent = null;
+        if (!string.IsNullOrWhiteSpace(request.ParentAccountCode))
+        {
+            var parentCode = request.ParentAccountCode.Trim();
+            parent = await _dbContext.Accounts
+                .FirstOrDefaultAsync(a => a.Code.ToLower() == parentCode.ToLower(), cancellationToken);
+            if (parent is null)
+                return ServiceResult<AccountResponse>.Fail($"Parent account '{parentCode}' was not found.");
+        }
+
         account.Name = request.Name.Trim();
         account.IsActive = request.IsActive;
-        account.UpdatedAt = DateTimeOffset.UtcNow;
+        account.Type = request.Type;
+        account.Statement = request.Statement;
+        account.BalanceSheetClass = request.BalanceSheetClass;
+        account.IncomeStatementClass = request.IncomeStatementClass;
+        account.CashFlowActivity = request.CashFlowActivity;
+        account.IsCashEquivalent = request.IsCashEquivalent;
+        account.IsContra = request.IsContra;
+        account.IsPostable = request.IsPostable;
+        account.ParentAccountId = parent?.Id;
 
+        account.UpdatedAt = DateTimeOffset.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return ServiceResult<AccountResponse>.Ok(await MapToResponseAsync(account, cancellationToken));
@@ -182,6 +201,12 @@ public class AccountService : IAccountService
 
         if (account is null)
             return ServiceResult<bool>.Fail($"Account with code '{code}' was not found.");
+
+        var hasChildAccounts = await _dbContext.Accounts
+            .AnyAsync(a => a.ParentAccountId == account.Id, cancellationToken);
+
+        if (hasChildAccounts)
+            return ServiceResult<bool>.Fail($"Cannot delete account '{account.Code}' because other accounts use it as their parent.");
 
         if (account.JournalEntryLines.Count > 0)
             return ServiceResult<bool>.Fail($"Cannot delete account '{account.Code}' because it has posted journal entries attached.");
