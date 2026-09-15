@@ -181,4 +181,112 @@ public sealed class SourceRuleServiceTests : IClassFixture<SqliteFixture>
         var rules = await service.GetAllRulesAsync();
         rules.Should().ContainSingle(r => r.SourceType == sourceType && !r.IsActive);
     }
+
+    [Fact]
+    public async Task UpdateRuleAsync_ShouldUpdateUnusedRule()
+    {
+        await using var context = _fixture.CreateDbContext();
+        var service = new SourceRuleService(context);
+        var sourceType = "UPDATE" + Suffix();
+        var created = await service.CreateRuleAsync(new CreateSourceRuleRequest
+        {
+            SourceType = sourceType,
+            Description = "Original description",
+            IsManualEntryAllowed = true
+        });
+
+        var updated = await service.UpdateRuleAsync(sourceType, new UpdateSourceRuleRequest
+        {
+            SourceType = sourceType + "_NEW",
+            Description = "Updated description",
+            IsManualEntryAllowed = true
+        });
+
+        created.Success.Should().BeTrue(created.ErrorMessage);
+        updated.Success.Should().BeTrue(updated.ErrorMessage);
+        updated.Data!.SourceType.Should().Be(sourceType + "_NEW");
+        updated.Data.Description.Should().Be("Updated description");
+    }
+
+    [Fact]
+    public async Task DeleteRuleAsync_ShouldDeleteUnusedRule()
+    {
+        await using var context = _fixture.CreateDbContext();
+        var service = new SourceRuleService(context);
+        var sourceType = "DELETE" + Suffix();
+        var created = await service.CreateRuleAsync(new CreateSourceRuleRequest
+        {
+            SourceType = sourceType,
+            Description = "Temporary rule",
+            IsManualEntryAllowed = true
+        });
+
+        var deleted = await service.DeleteRuleAsync(sourceType);
+
+        created.Success.Should().BeTrue(created.ErrorMessage);
+        deleted.Success.Should().BeTrue(deleted.ErrorMessage);
+        (await service.GetAllRulesAsync()).Should().NotContain(r => r.SourceType == sourceType);
+    }
+
+    [Fact]
+    public async Task UpdateRuleAsync_ShouldHandleNullRuleLines_FromFrontendEditForm()
+    {
+        // Regression test: the Admin edit form serialises an untouched/empty
+        // grid as "ruleLines": null, which System.Text.Json binds as a null
+        // List (overwriting the "= new()" initializer). This used to NRE
+        // inside UpdateRuleAsync and surface as a 500 InternalServerError
+        // when renaming e.g. "XXX" -> "XXX_UPDATED".
+        await using var context = _fixture.CreateDbContext();
+        var service = new SourceRuleService(context);
+        var sourceType = "XXX" + Suffix();
+        var created = await service.CreateRuleAsync(new CreateSourceRuleRequest
+        {
+            SourceType = sourceType,
+            Description = "Original description",
+            IsManualEntryAllowed = true
+        });
+        created.Success.Should().BeTrue(created.ErrorMessage);
+
+        var updated = await service.UpdateRuleAsync(sourceType, new UpdateSourceRuleRequest
+        {
+            SourceType = sourceType + "_UPDATED",
+            Description = "Updated description",
+            IsManualEntryAllowed = true,
+            RuleLines = null!
+        });
+
+        updated.Success.Should().BeTrue(updated.ErrorMessage ?? "null RuleLines caused a failure");
+        updated.Data!.SourceType.Should().Be(sourceType + "_UPDATED");
+    }
+
+    [Fact]
+    public async Task UpdateRuleAsync_ShouldRejectRuleUsedByJournalEntry()
+    {
+        await using var context = _fixture.CreateDbContext();
+        var service = new SourceRuleService(context);
+        var sourceType = "USED" + Suffix();
+        var created = await service.CreateRuleAsync(new CreateSourceRuleRequest
+        {
+            SourceType = sourceType,
+            Description = "Used rule",
+            IsManualEntryAllowed = true
+        });
+        context.JournalEntries.Add(new AccountingEngine.Core.Domain.Entities.JournalEntry
+        {
+            Reference = "REF-" + Suffix(),
+            SourceType = sourceType
+        });
+        await context.SaveChangesAsync();
+
+        var updated = await service.UpdateRuleAsync(sourceType, new UpdateSourceRuleRequest
+        {
+            SourceType = sourceType,
+            Description = "Should not update",
+            IsManualEntryAllowed = true
+        });
+
+        created.Success.Should().BeTrue(created.ErrorMessage);
+        updated.Success.Should().BeFalse();
+        updated.ErrorMessage.Should().Contain("used by journal entries");
+    }
 }

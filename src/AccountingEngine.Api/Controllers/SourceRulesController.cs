@@ -47,4 +47,30 @@ public class SourceRulesController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPut("{sourceType}")]
+    public async Task<IActionResult> Update(string sourceType, [FromBody] UpdateSourceRuleRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _ruleService.UpdateRuleAsync(sourceType, request, cancellationToken);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Data);
+    }
+
+    [HttpDelete("{sourceType}")]
+    public async Task<IActionResult> Delete(string sourceType, CancellationToken cancellationToken)
+    {
+        var result = await _ruleService.DeleteRuleAsync(sourceType, cancellationToken);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return NoContent();
+    }
 }

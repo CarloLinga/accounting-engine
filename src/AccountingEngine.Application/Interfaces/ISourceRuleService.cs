@@ -8,6 +8,15 @@ public interface ISourceRuleService
         CreateSourceRuleRequest request, 
         CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<SourceRuleResponse>> UpdateRuleAsync(
+        string sourceType,
+        UpdateSourceRuleRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> DeleteRuleAsync(
+        string sourceType,
+        CancellationToken cancellationToken = default);
+
     Task<List<SourceRuleResponse>> GetAllRulesAsync(
         CancellationToken cancellationToken = default);
 
