@@ -121,7 +121,13 @@ dotnet test tests/AccountingEngine.Tests
 | PATCH  | `/api/accounts/{code}/active`  | Activate/deactivate an account.               |
 | DELETE | `/api/accounts/{code}`         | Delete an account (blocked if posted to).     |
 | GET    | `/api/source-rules`            | List source rules.                            |
+| GET    | `/api/source-rules/amount-types` | Amount types for rule lines (used + engine defaults). |
+| GET    | `/api/source-rules/{id}`       | Get a source rule by stable Id.               |
 | POST   | `/api/source-rules`            | Create a source rule.                         |
+| PUT    | `/api/source-rules/{id}`       | Update a source rule by Id (supports renames).|
+| PUT    | `/api/source-rules/{sourceType}` | Legacy update by code (prefer PUT by Id).   |
+| DELETE | `/api/source-rules/{id}`       | Delete a source rule by Id.                   |
+| DELETE | `/api/source-rules/{sourceType}` | Legacy delete by code (prefer DELETE by Id).|
 | PATCH  | `/api/source-rules/{sourceType}/status` | Activate/deactivate a rule.          |
 | POST   | `/api/journals`                | Post a manual journal entry.                  |
 | POST   | `/api/journals/source`         | Post a journal entry from a source rule.      |
