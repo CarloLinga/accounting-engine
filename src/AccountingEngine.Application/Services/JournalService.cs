@@ -258,6 +258,123 @@ public class JournalService : IJournalService
         };
     }
 
+    public async Task<ServiceResult<JournalEntryResponse>> UpdateJournalEntryAsync(
+        Guid id,
+        UpdateJournalEntryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+            return ServiceResult<JournalEntryResponse>.Fail("Journal update request cannot be null.");
+
+        var entry = await _dbContext.JournalEntries
+            .Include(j => j.JournalEntryLines)
+            .FirstOrDefaultAsync(j => j.Id == id, cancellationToken);
+
+        if (entry is null)
+            return ServiceResult<JournalEntryResponse>.Fail($"Journal Entry with ID '{id}' was not found.");
+
+        var cleanReference = request.Reference?.Trim() ?? string.Empty;
+        if (cleanReference.Length == 0)
+            return ServiceResult<JournalEntryResponse>.Fail("Transaction reference is required.");
+
+        var duplicateReference = await _dbContext.JournalEntries
+            .AnyAsync(j => j.Id != id && j.Reference == cleanReference, cancellationToken);
+        if (duplicateReference)
+            return ServiceResult<JournalEntryResponse>.Fail(
+                $"A journal entry with reference '{cleanReference}' already exists.");
+
+        var validation = await ValidateJournalLinesAsync(request.Lines, cancellationToken);
+        if (!validation.Success)
+            return ServiceResult<JournalEntryResponse>.Fail(validation.ErrorMessage!);
+
+        _dbContext.JournalEntryLines.RemoveRange(entry.JournalEntryLines);
+        entry.JournalEntryLines.Clear();
+        entry.Reference = cleanReference;
+        entry.Description = request.Description?.Trim();
+        entry.PostedAt = request.PostedAt;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var lineRequest in request.Lines)
+        {
+            var accountCode = lineRequest.AccountCode.Trim();
+            _dbContext.JournalEntryLines.Add(new JournalEntryLine
+            {
+                Id = Guid.NewGuid(),
+                JournalEntryId = entry.Id,
+                AccountId = validation.Data![accountCode],
+                Sequence = lineRequest.Sequence,
+                Debit = lineRequest.Debit,
+                Credit = lineRequest.Credit,
+                Description = lineRequest.Description?.Trim()
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var savedEntry = await _dbContext.JournalEntries
+            .Include(j => j.JournalEntryLines)
+                .ThenInclude(l => l.Account)
+            .FirstAsync(j => j.Id == id, cancellationToken);
+
+        return ServiceResult<JournalEntryResponse>.Ok(MapToResponse(savedEntry));
+    }
+
+    public async Task<ServiceResult<bool>> DeleteJournalEntryAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await _dbContext.JournalEntries
+            .FirstOrDefaultAsync(j => j.Id == id, cancellationToken);
+
+        if (entry is null)
+            return ServiceResult<bool>.Fail($"Journal Entry with ID '{id}' was not found.");
+
+        _dbContext.JournalEntries.Remove(entry);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    private async Task<ServiceResult<Dictionary<string, Guid>>> ValidateJournalLinesAsync(
+        List<JournalLineRequest>? lines,
+        CancellationToken cancellationToken)
+    {
+        if (lines is null || lines.Count < 2)
+            return ServiceResult<Dictionary<string, Guid>>.Fail("A journal entry must contain at least two lines.");
+
+        var totalDebit = lines.Sum(l => l.Debit);
+        var totalCredit = lines.Sum(l => l.Credit);
+        if (totalDebit != totalCredit)
+            return ServiceResult<Dictionary<string, Guid>>.Fail(
+                $"Unbalanced entry: Total Debits ({totalDebit:C2}) do not equal Total Credits ({totalCredit:C2}). Difference: {Math.Abs(totalDebit - totalCredit):C2}.");
+
+        if (totalDebit <= 0)
+            return ServiceResult<Dictionary<string, Guid>>.Fail("Transaction total must be greater than zero.");
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line.AccountCode))
+                return ServiceResult<Dictionary<string, Guid>>.Fail($"Account code is required for line {i + 1}.");
+
+            if ((line.Debit > 0 && line.Credit > 0) || (line.Debit == 0 && line.Credit == 0))
+                return ServiceResult<Dictionary<string, Guid>>.Fail(
+                    $"Line {i + 1} for account '{line.AccountCode}' is invalid: must specify either Debit OR Credit, but not both or neither.");
+        }
+
+        var accountCodes = lines.Select(l => l.AccountCode.Trim()).Distinct().ToList();
+        var accounts = await _dbContext.Accounts
+            .Where(a => accountCodes.Contains(a.Code) && a.IsActive && a.IsPostable)
+            .ToDictionaryAsync(a => a.Code, a => a.Id, cancellationToken);
+
+        var missingAccounts = accountCodes.Except(accounts.Keys).ToList();
+        if (missingAccounts.Count > 0)
+            return ServiceResult<Dictionary<string, Guid>>.Fail(
+                $"The following account codes do not exist, are inactive, or are report headers: {string.Join(", ", missingAccounts)}");
+
+        return ServiceResult<Dictionary<string, Guid>>.Ok(accounts);
+    }
+
     private static JournalEntryResponse MapToResponse(JournalEntry t) => new()
     {
         Id = t.Id,

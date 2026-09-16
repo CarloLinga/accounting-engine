@@ -14,6 +14,15 @@ public interface IJournalService
         PostSourceTransactionRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<ServiceResult<JournalEntryResponse>> UpdateJournalEntryAsync(
+        Guid id,
+        UpdateJournalEntryRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<ServiceResult<bool>> DeleteJournalEntryAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
     // GET all transactions with optional filtering
     Task<List<JournalEntryResponse>> GetJournalEntriesAsync(
         DateTimeOffset? startDate = null,

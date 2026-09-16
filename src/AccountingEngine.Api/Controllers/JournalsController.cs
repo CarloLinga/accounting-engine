@@ -70,6 +70,39 @@ public class JournalsController : ControllerBase
         var transaction = await _journalService.GetJournalEntryByIdAsync(id, cancellationToken);
         return transaction is null ? NotFound(new { error = $"Transaction '{id}' not found." }) : Ok(transaction);   
     }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(JournalEntryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateJournalEntry(
+        Guid id,
+        [FromBody] UpdateJournalEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _journalService.UpdateJournalEntryAsync(id, request, cancellationToken);
+        if (!result.Success)
+        {
+            if (result.ErrorMessage?.Contains("was not found", StringComparison.OrdinalIgnoreCase) == true)
+                return NotFound(new { error = result.ErrorMessage });
+
+            return BadRequest(new { error = result.ErrorMessage });
+        }
+
+        return Ok(result.Data);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteJournalEntry(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _journalService.DeleteJournalEntryAsync(id, cancellationToken);
+        if (!result.Success)
+            return NotFound(new { error = result.ErrorMessage });
+
+        return NoContent();
+    }
     
     /// <summary>
     /// Retrieves a posted transaction and its journal lines by unique reference code.

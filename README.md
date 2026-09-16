@@ -133,5 +133,7 @@ dotnet test tests/AccountingEngine.Tests
 | POST   | `/api/journals/source`         | Post a journal entry from a source rule.      |
 | GET    | `/api/journals`                | List journal entries (date/source filters).   |
 | GET    | `/api/journals/{id}`           | Get a journal entry by id.                    |
+| PUT    | `/api/journals/{id}`           | Replace a journal entry and its lines.       |
+| DELETE | `/api/journals/{id}`           | Delete a journal entry and its lines.        |
 | GET    | `/api/journals/reference/{reference}` | Get a journal entry by reference.       |
 | GET    | `/api/trial-balance`           | Trial Balance report for a fiscal year.       |

@@ -22,6 +22,21 @@ public record PostGeneralJournalRequest
     [MinLength(2, ErrorMessage = "A journal entry must have at least two lines.")]
     public List<JournalLineRequest> Lines { get; init; } = new();
 }
+
+public record UpdateJournalEntryRequest
+{
+    [Required(ErrorMessage = "Transaction reference is required.")]
+    public string Reference { get; init; } = string.Empty;
+
+    [Required(ErrorMessage = "Posting date is required.")]
+    public DateTimeOffset PostedAt { get; init; } = DateTimeOffset.UtcNow;
+
+    public string? Description { get; init; }
+
+    [Required(ErrorMessage = "Journal entry lines are required.")]
+    [MinLength(2, ErrorMessage = "A journal entry must have at least two lines.")]
+    public List<JournalLineRequest> Lines { get; init; } = new();
+}
 public record JournalLineRequest
 {
     [Required(ErrorMessage = "Account code is required.")]
