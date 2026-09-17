@@ -67,6 +67,7 @@ public record TrialBalanceResponse
     /// <summary>True when TotalDebits equals TotalCredits.</summary>
     public bool IsBalanced { get; init; }
 
-    /// <summary>One row per account, ordered by account code.</summary>
+    /// <summary>One row per account that has opening-balance or in-period activity,
+    /// ordered by account code. Accounts with no transactions are omitted.</summary>
     public List<TrialBalanceLineResponse> Lines { get; init; } = new();
 }

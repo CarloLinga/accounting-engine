@@ -74,6 +74,14 @@ public class TrialBalanceService : ITrialBalanceService
                 periodCredit = period.Credit;
             }
 
+            // Only accounts with opening-balance or in-period activity are
+            // included in the trial balance. An account whose opening and period
+            // totals are both zero has no transactions to report and is omitted.
+            if (openingDebit == 0m && openingCredit == 0m && periodDebit == 0m && periodCredit == 0m)
+            {
+                continue;
+            }
+
             var closingDebit = openingDebit + periodDebit;
             var closingCredit = openingCredit + periodCredit;
 

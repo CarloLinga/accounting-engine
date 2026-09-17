@@ -242,17 +242,19 @@ public sealed class TrialBalanceServiceTests : IClassFixture<SqliteFixture>
         deactivated.Success.Should().BeTrue(deactivated.ErrorMessage);
 
         // No postings at all in this scenario → every account has a zero balance,
-        // which also proves the report lists zero-activity accounts.
+        // which means no account qualifies for the report under the new behaviour.
         var service = new TrialBalanceService(context);
 
         var excluded = await service.GenerateTrialBalanceAsync();
         excluded.Success.Should().BeTrue(excluded.ErrorMessage);
         excluded.Data!.Lines.Should().NotContain(l => l.AccountCode == ar);
-        // sales is active but has no postings → must still appear with zero balance.
-        excluded.Data!.Lines.Single(l => l.AccountCode == sales).ClosingBalance.Should().Be(0m);
+        // sales is active but has no postings at all → omitted from the report.
+        excluded.Data!.Lines.Should().NotContain(l => l.AccountCode == sales);
 
         var included = await service.GenerateTrialBalanceAsync(includeInactiveAccounts: true);
         included.Success.Should().BeTrue(included.ErrorMessage);
-        included.Data!.Lines.Should().Contain(l => l.AccountCode == ar && l.ClosingDebit == 0m);
+        // ar is inactive *and* has no postings → still omitted even when
+        // includeInactiveAccounts is true, because it has no transactions.
+        included.Data!.Lines.Should().NotContain(l => l.AccountCode == ar);
     }
 }
