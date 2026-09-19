@@ -43,6 +43,7 @@ builder.Services.AddScoped<IAccountingDbContext>(sp => sp.GetRequiredService<Acc
 // 2. Application Services Dependency Injection
 // -----------------------------------------------------------------------------
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<ISalesJournalService, SalesJournalService>();
 builder.Services.AddScoped<IJournalService, JournalService>();
 builder.Services.AddScoped<ISourceRuleService, SourceRuleService>();
 builder.Services.AddScoped<ITrialBalanceService, TrialBalanceService>();
